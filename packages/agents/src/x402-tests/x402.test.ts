@@ -632,6 +632,83 @@ describe("withX402", () => {
     expect(result.isError).toBeUndefined();
   });
 
+  it("reads payment token from the MCP SDK v2 request context", async () => {
+    const server = createMockMcpServer();
+    const augmented = withX402(server, defaultServerConfig);
+
+    mockResourceServer.buildPaymentRequirements.mockResolvedValue(
+      samplePaymentRequirements
+    );
+    mockResourceServer.findMatchingRequirements.mockReturnValue(
+      samplePaymentRequirements[0]
+    );
+    mockResourceServer.verifyPayment.mockResolvedValue({ isValid: true });
+    mockResourceServer.settlePayment.mockResolvedValue({
+      success: true,
+      transaction: "0xTxHash",
+      network: "eip155:84532",
+      payer: "0xPayer"
+    });
+
+    augmented.paidTool("paid-tool", "Costs money", 0.01, {}, {}, async () => ({
+      content: [{ type: "text", text: "ok" }]
+    }));
+
+    const registeredCb = getRegisteredCallback(server);
+    const fakePayload = { scheme: "exact", network: "eip155:84532" };
+    const token = btoa(JSON.stringify(fakePayload));
+
+    // MCP SDK v2 hands the request to the handler on `mcpReq`, so the request `_meta`
+    // is read from there rather than from `extra._meta` (v1).
+    const result = (await registeredCb(
+      {},
+      {
+        sessionId: "session-1",
+        mcpReq: { _meta: { "x402/payment": token } },
+        http: {}
+      }
+    )) as Record<string, unknown>;
+
+    expect(result.isError).toBeUndefined();
+  });
+
+  it("reads payment token from the MCP SDK v1 request meta", async () => {
+    const server = createMockMcpServer();
+    const augmented = withX402(server, defaultServerConfig);
+
+    mockResourceServer.buildPaymentRequirements.mockResolvedValue(
+      samplePaymentRequirements
+    );
+    mockResourceServer.findMatchingRequirements.mockReturnValue(
+      samplePaymentRequirements[0]
+    );
+    mockResourceServer.verifyPayment.mockResolvedValue({ isValid: true });
+    mockResourceServer.settlePayment.mockResolvedValue({
+      success: true,
+      transaction: "0xTxHash",
+      network: "eip155:84532",
+      payer: "0xPayer"
+    });
+
+    augmented.paidTool("paid-tool", "Costs money", 0.01, {}, {}, async () => ({
+      content: [{ type: "text", text: "ok" }]
+    }));
+
+    const registeredCb = getRegisteredCallback(server);
+    const fakePayload = { scheme: "exact", network: "eip155:84532" };
+    const token = btoa(JSON.stringify(fakePayload));
+
+    // MCP SDK v1 keeps the request `_meta` directly on `extra`
+    const result = (await registeredCb(
+      {},
+      {
+        _meta: { "x402/payment": token }
+      }
+    )) as Record<string, unknown>;
+
+    expect(result.isError).toBeUndefined();
+  });
+
   it("normalizes legacy network name in config and passes CAIP-2 to resource server", async () => {
     const server = createMockMcpServer();
     const augmented = withX402(server, {

@@ -178,9 +178,16 @@ export function withX402<T extends McpServer>(
         };
 
         // Get payment token from MCP _meta or HTTP headers
+        // MCP SDK v2 hands the request to the handler on `extra.mcpReq`, so the request
+        // `_meta` lives there; v1 put it on `extra` directly. Read both so a paid tool
+        // works with either SDK version.
         // Support both v2 (PAYMENT-SIGNATURE) and v1 (X-PAYMENT) header names
+        const v2RequestMeta = (
+          extra as { mcpReq?: { _meta?: Record<string, unknown> } } | undefined
+        )?.mcpReq?._meta;
         const headers = extra?.requestInfo?.headers ?? {};
         const token =
+          (v2RequestMeta?.["x402/payment"] as string | undefined) ??
           (extra?._meta?.["x402/payment"] as string | undefined) ??
           headers["PAYMENT-SIGNATURE"] ??
           headers["X-PAYMENT"];
